@@ -18,9 +18,8 @@ class App(nps.NPSAppManaged):
     def onStart(self):
         self.addForm("MAIN", MainForm, name="streamlet")
 
-    # TODO: cleanup subprocesses etc correctly here
-    # def onCleanExit(self):
-    #     log.debug("Bye!")
+    def onCleanExit(self):
+        self.getForm("MAIN").destroy()
 
 
 class MainForm(nps.Form):
@@ -37,13 +36,7 @@ class MainForm(nps.Form):
             },
         )
 
-        # TODO: should also display a timer
-        self.w_playing = self.add(
-            PlayingBarBox,
-            name="Playing",
-            max_height=3,
-            contained_widget_arguments={"out_of": 100},
-        )
+        self.w_playing = self.add(PlayingBarBox, name="Playing", max_height=3,)
 
         self.w_play = self.add(
             PlayButtonBox,
@@ -51,6 +44,11 @@ class MainForm(nps.Form):
             max_width=14,
             contained_widget_arguments={"parent_form": self},
         )
+
+    def destroy(self):
+        self.w_play.destroy()
+        self.w_playing.destroy()
+        self.w_video_url.destroy()
 
     def afterEditing(self):
         self.parentApp.setNextForm(None)
@@ -77,9 +75,14 @@ class PlayingBar(nps.SliderNoLabel):
         self.t_anim.start()
 
     def anim_off(self):
-        self.t_anim.terminate()
+        if self.t_anim is not None:
+            self.t_anim.terminate()
+
+    def destroy(self):
+        self.anim_off()
 
 
+# TODO: should also contain a timer
 class PlayingBarBox(nps.BoxTitle):
     _contained_widget = PlayingBar
 
@@ -92,6 +95,9 @@ class PlayingBarBox(nps.BoxTitle):
     def anim_off(self):
         self.entry_widget.anim_off()
 
+    def destroy(self):
+        self.entry_widget.destroy()
+
 
 class PlayButton(nps.ButtonPress):
     PLAY = "\u25B6"
@@ -101,8 +107,10 @@ class PlayButton(nps.ButtonPress):
         super().__init__(*args, **kw)
         self.parent_form = kw.get("parent_form", None)
         self.name = PlayButton.PLAY
-        self.p_ffplay = None  # TODO: better handling of subprocess handle
+        self.p_ydl = None
+        self.p_ffplay = None
 
+    # TODO: reset button when playing is finished
     def whenPressed(self):
         # Play music
         if self.name == PlayButton.PLAY:
@@ -138,10 +146,9 @@ class PlayButton(nps.ButtonPress):
                     }
                     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                         ydl.extract_info(video_url)
-                        # TODO: use some postprocess hook to close tx?
 
-                p_ydl = Process(target=play, args=(tx, video_url))
-                p_ydl.start()
+                self.p_ydl = Process(target=play, args=(tx, video_url))
+                self.p_ydl.start()
 
                 self.parent_form.w_playing.anim_on()
 
@@ -158,14 +165,28 @@ class PlayButton(nps.ButtonPress):
             self.parent_form.w_playing.anim_off()
             self.name = PlayButton.PLAY
 
+    def destroy(self):
+        if self.p_ydl is not None:
+            self.p_ydl.kill()
+        if self.p_ffplay is not None:
+            self.p_ffplay.kill()
+
 
 class PlayButtonBox(nps.BoxTitle):
     _contained_widget = PlayButton
 
+    def destroy(self):
+        self.entry_widget.destroy()
+
 
 def main():
-    # TODO: use App.onCleanExit() here
-    signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(0))
+    app = App()
+
+    def kill_app(sig, frame):
+        app.onCleanExit()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, kill_app)
 
     log.basicConfig(
         format="%(levelname)s %(asctime)s %(filename)s:%(lineno)d %(message)s",
@@ -174,4 +195,4 @@ def main():
     )
     log.critical("=" * 70)
 
-    App().run()
+    app.run()
