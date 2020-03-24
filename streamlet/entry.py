@@ -1,15 +1,15 @@
-import time
 import logging as log
 import os
 import signal
 import sys
+import time
 from multiprocessing import Pipe, Process
 from subprocess import Popen
 
 import npyscreen as nps
-import youtube_dl
+from youtube_dl import YoutubeDL
 
-from .killable_thread import KillableThread
+from .thread_utils import KillableThread, synchronized
 
 FNULL = open(os.devnull, "w")
 
@@ -32,7 +32,7 @@ class MainForm(nps.Form):
             name="Video",
             contained_widget_arguments={
                 "name": "URL:",
-                "value": "https://www.youtube.com/watch?v=htML2EzF2uI",
+                "value": "https://www.youtube.com/watch?v=ukzOgoLjHLk",
             },
         )
 
@@ -63,6 +63,10 @@ class PlayingBar(nps.SliderNoLabel):
         super().__init__(*args, **kw)
         self.editable = False
         self.t_anim = None
+
+    @synchronized
+    def display(self):
+        super().display()
 
     def anim_on(self):
         def anim(w):
@@ -123,7 +127,7 @@ class PlayButton(nps.ButtonPress):
                     "retries": 10,
                     "logger": log,
                 }
-                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                with YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(video_url, download=False)
                     duration = info["duration"]
                     self.parent_form.w_playing.set_duration(duration)
@@ -144,7 +148,7 @@ class PlayButton(nps.ButtonPress):
                         "retries": 10,
                         "logger": log,
                     }
-                    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    with YoutubeDL(ydl_opts) as ydl:
                         ydl.extract_info(video_url)
 
                 self.p_ydl = Process(target=play, args=(tx, video_url))
