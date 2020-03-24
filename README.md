@@ -23,7 +23,6 @@ You will also have dev dependencies avaialble, that means [black][] for code for
 [flake8][] for linting, [jedi][] for autocompletion/static analysis/refactoring.
 
 To test as you develop, you can use `poetry run streamlet` and play with it.
-Be careful and watch out for python zombie processes though!
 
 [poetry]: https://python-poetry.org/
 [black]: https://github.com/psf/black

@@ -1,12 +1,15 @@
-import multiprocessing as mp
+import time
 import logging as log
 import os
 import signal
-import subprocess as sp
 import sys
+from multiprocessing import Pipe, Process
+from subprocess import Popen
 
 import npyscreen as nps
 import youtube_dl
+
+from .killable_thread import KillableThread
 
 FNULL = open(os.devnull, "w")
 
@@ -34,15 +37,13 @@ class MainForm(nps.Form):
             },
         )
 
-        # TODO: should be dynamically updated somehow
-        # TODO: and also display a timer
+        # TODO: should also display a timer
         self.w_playing = self.add(
             PlayingBarBox,
             name="Playing",
             max_height=3,
             contained_widget_arguments={"out_of": 100},
         )
-        self.w_playing.set_value(25)
 
         self.w_play = self.add(
             PlayButtonBox,
@@ -63,27 +64,33 @@ class PlayingBar(nps.SliderNoLabel):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         self.editable = False
+        self.t_anim = None
+
+    def anim_on(self):
+        def anim(w):
+            while True:
+                w.h_increase(1)
+                w.display()
+                time.sleep(1)
+
+        self.t_anim = KillableThread(target=anim, args=(self,))
+        self.t_anim.start()
+
+    def anim_off(self):
+        self.t_anim.terminate()
 
 
 class PlayingBarBox(nps.BoxTitle):
     _contained_widget = PlayingBar
 
+    def set_duration(self, duration):
+        self.entry_widget.out_of = duration
 
-def play(tx, video_url):
-    os.dup2(tx.fileno(), 1)
+    def anim_on(self):
+        self.entry_widget.anim_on()
 
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": "-",
-        "logger": log,
-    }
-
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url)
-        duration = info["duration"]  # TODO: use that for the PlayingBar
-        # ext = info["ext"]
-        log.info("Duration of {} seconds".format(duration))
-        # TODO: use some postprocess hook to close tx?
+    def anim_off(self):
+        self.entry_widget.anim_off()
 
 
 class PlayButton(nps.ButtonPress):
@@ -99,27 +106,48 @@ class PlayButton(nps.ButtonPress):
     def whenPressed(self):
         # Play music
         if self.name == PlayButton.PLAY:
-
             # Music was not started
             if self.p_ffplay is None:
                 video_url = self.parent_form.w_video_url.value
 
-                rx, tx = mp.Pipe(duplex=False)
+                ydl_opts = {
+                    "format": "bestaudio/best",
+                    "retries": 10,
+                    "logger": log,
+                }
+                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(video_url, download=False)
+                    duration = info["duration"]
+                    self.parent_form.w_playing.set_duration(duration)
+                    self.parent_form.w_playing.set_value(0)
+                    self.parent_form.w_playing.update()
+
+                rx, tx = Pipe(duplex=False)
                 rdr = os.fdopen(rx.fileno(), "r")
 
                 ffplay_cmd = ["ffplay", "-nodisp", "-autoexit", "-hide_banner", "-"]
-                self.p_ffplay = sp.Popen(
-                    ffplay_cmd, stdin=rdr, stdout=FNULL, stderr=FNULL
-                )
+                self.p_ffplay = Popen(ffplay_cmd, stdin=rdr, stdout=FNULL, stderr=FNULL)
 
-                p_ydl = mp.Process(target=play, args=(tx, video_url))
+                def play(tx, video_url):
+                    os.dup2(tx.fileno(), 1)
+                    ydl_opts = {
+                        "format": "bestaudio/best",
+                        "outtmpl": "-",
+                        "retries": 10,
+                        "logger": log,
+                    }
+                    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                        ydl.extract_info(video_url)
+                        # TODO: use some postprocess hook to close tx?
+
+                p_ydl = Process(target=play, args=(tx, video_url))
                 p_ydl.start()
 
-                # p_ydl.join()
-                # p_ffplay.wait()
+                self.parent_form.w_playing.anim_on()
 
             # Music was paused
             else:
+                self.parent_form.w_playing.anim_on()
                 self.p_ffplay.send_signal(signal.SIGCONT)
 
             self.name = PlayButton.PAUSE
@@ -127,6 +155,7 @@ class PlayButton(nps.ButtonPress):
         # Pause music
         else:
             self.p_ffplay.send_signal(signal.SIGTSTP)
+            self.parent_form.w_playing.anim_off()
             self.name = PlayButton.PLAY
 
 
