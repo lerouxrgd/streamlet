@@ -7,9 +7,10 @@ import time
 
 import npyscreen as nps
 
-from threading import Thread
+from datetime import datetime
 from multiprocessing import Pipe, Process
 from subprocess import Popen
+from threading import Thread
 
 from youtube_dl import YoutubeDL
 from .thread_utils import KillableThread, synchronized
@@ -30,17 +31,14 @@ class MainForm(nps.Form):
 
     def create(self):
         self.w_video_url = self.add(
-            VideoUrlInputBox,
-            max_height=3,
-            name="Video",
-            contained_widget_arguments={
-                "parent_form": self,
-                "name": "URL:",
-                "value": "https://www.youtube.com/watch?v=ukzOgoLjHLk",
-            },
+            VideoUrlInput,
+            parent_form=self,
+            name="Stream URL:",
+            value="https://www.youtube.com/watch?v=ukzOgoLjHLk",
+            # value="https://www.youtube.com/watch?v=XivIbYWE0go",
         )
 
-        self.w_playing = self.add(PlayingBarBox, max_height=3,)
+        self.w_playing = self.add(PlayingBarBox, rely=4, max_height=3,)
 
         self.w_play = self.add(
             PlayButtonBox,
@@ -70,18 +68,17 @@ class VideoUrlInput(nps.TitleText):
                 "logger": log,
             }
             with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(self.value, download=False)
-                duration = info["duration"]
-                self.parent_form.w_play.stop()
-                self.parent_form.w_playing.name = info["title"]
-                self.parent_form.w_playing.set_duration(duration)
-                self.parent_form.w_playing.display()
+                try:
+                    info = ydl.extract_info(self.value, download=False)
+                    duration = info["duration"]
+                    self.parent_form.w_play.stop()
+                    self.parent_form.w_playing.name = info["title"]
+                    self.parent_form.w_playing.set_duration(duration)
+                    self.parent_form.w_playing.display()
+                except Exception:
+                    return
 
         self.entry_widget.add_handlers({curses.ascii.LF: prepare_video})
-
-
-class VideoUrlInputBox(nps.BoxTitle):
-    _contained_widget = VideoUrlInput
 
 
 class PlayingBar(nps.SliderNoLabel):
@@ -98,12 +95,11 @@ class PlayingBar(nps.SliderNoLabel):
         if self.t_anim is not None:
             return
 
-        # TODO: more robust approach (spamming play/pause make it advance too much)
         def anim(w):
             while True:
+                time.sleep(1 - datetime.utcnow().microsecond/1000000.0)
                 w.h_increase(1)
                 w.display()
-                time.sleep(1)
 
         self.t_anim = KillableThread(target=anim, args=(self,), daemon=True)
         self.t_anim.start()
@@ -114,7 +110,7 @@ class PlayingBar(nps.SliderNoLabel):
             self.t_anim = None
 
 
-# TODO: should also contain a timer
+# TODO: should also contain a timer (in the footer ?)
 class PlayingBarBox(nps.BoxTitle):
     _contained_widget = PlayingBar
 
@@ -216,6 +212,9 @@ class PlayButtonBox(nps.BoxTitle):
 
     def stop(self):
         self.entry_widget.stop()
+
+    def destroy(self):
+        self.entry_widget.destroy()
 
 
 def main():
