@@ -1,5 +1,6 @@
 import logging as log
 import os
+import curses
 import signal
 import sys
 import time
@@ -29,16 +30,17 @@ class MainForm(nps.Form):
 
     def create(self):
         self.w_video_url = self.add(
-            VideoUrlBox,
+            VideoUrlInputBox,
             max_height=3,
             name="Video",
             contained_widget_arguments={
+                "parent_form": self,
                 "name": "URL:",
                 "value": "https://www.youtube.com/watch?v=ukzOgoLjHLk",
             },
         )
 
-        self.w_playing = self.add(PlayingBarBox, name="Playing", max_height=3,)
+        self.w_playing = self.add(PlayingBarBox, max_height=3,)
 
         self.w_play = self.add(
             PlayButtonBox,
@@ -56,9 +58,30 @@ class MainForm(nps.Form):
         self.parentApp.setNextForm(None)
 
 
-# TODO: change video dynamically (i.e. kill stuff that is being played, if any)
-class VideoUrlBox(nps.BoxTitle):
-    _contained_widget = nps.TitleText
+class VideoUrlInput(nps.TitleText):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.parent_form = kw.get("parent_form", None)
+
+        def prepare_video(_input):
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "retries": 10,
+                "logger": log,
+            }
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(self.value, download=False)
+                duration = info["duration"]
+                self.parent_form.w_play.stop()
+                self.parent_form.w_playing.name = info["title"]
+                self.parent_form.w_playing.set_duration(duration)
+                self.parent_form.w_playing.display()
+
+        self.entry_widget.add_handlers({curses.ascii.LF: prepare_video})
+
+
+class VideoUrlInputBox(nps.BoxTitle):
+    _contained_widget = VideoUrlInput
 
 
 class PlayingBar(nps.SliderNoLabel):
@@ -127,24 +150,13 @@ class PlayButton(nps.ButtonPress):
         self.t_checker.start()
 
     def whenPressed(self):
+        if self.parent_form.w_playing.name is None:
+            return
+
         # Play music
         if self.name == PlayButton.PLAY:
             # Music was not started
             if self.p_ffplay is None:
-                video_url = self.parent_form.w_video_url.value
-
-                ydl_opts = {
-                    "format": "bestaudio/best",
-                    "retries": 10,
-                    "logger": log,
-                }
-                with YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(video_url, download=False)
-                    duration = info["duration"]
-                    self.parent_form.w_playing.set_duration(duration)
-                    self.parent_form.w_playing.set_value(0)
-                    self.parent_form.w_playing.update()
-
                 rx, tx = Pipe(duplex=False)
                 rdr = os.fdopen(rx.fileno(), "r")
 
@@ -162,6 +174,7 @@ class PlayButton(nps.ButtonPress):
                     with YoutubeDL(ydl_opts) as ydl:
                         ydl.extract_info(video_url)
 
+                video_url = self.parent_form.w_video_url.value
                 self.p_ydl = Process(target=play, args=(tx, video_url))
                 self.p_ydl.start()
 
@@ -201,8 +214,8 @@ class PlayButton(nps.ButtonPress):
 class PlayButtonBox(nps.BoxTitle):
     _contained_widget = PlayButton
 
-    def destroy(self):
-        self.entry_widget.destroy()
+    def stop(self):
+        self.entry_widget.stop()
 
 
 def main():
