@@ -3,12 +3,13 @@ import os
 import signal
 import sys
 import time
+
+import npyscreen as nps
+
 from multiprocessing import Pipe, Process
 from subprocess import Popen
 
-import npyscreen as nps
 from youtube_dl import YoutubeDL
-
 from .thread_utils import KillableThread, synchronized
 
 FNULL = open(os.devnull, "w")
@@ -54,6 +55,7 @@ class MainForm(nps.Form):
         self.parentApp.setNextForm(None)
 
 
+# TODO: change video dynamically (i.e. kill stuff that is being played, if any)
 class VideoUrlBox(nps.BoxTitle):
     _contained_widget = nps.TitleText
 
@@ -69,21 +71,23 @@ class PlayingBar(nps.SliderNoLabel):
         super().display()
 
     def anim_on(self):
+        if self.t_anim is not None:
+            return
+
+        # TODO: more robust approach (spamming play/pause make it advance too much)
         def anim(w):
             while True:
                 w.h_increase(1)
                 w.display()
                 time.sleep(1)
 
-        self.t_anim = KillableThread(target=anim, args=(self,))
+        self.t_anim = KillableThread(target=anim, args=(self,), daemon=True)
         self.t_anim.start()
 
     def anim_off(self):
         if self.t_anim is not None:
             self.t_anim.terminate()
-
-    def destroy(self):
-        self.anim_off()
+            self.t_anim = None
 
 
 # TODO: should also contain a timer
@@ -98,9 +102,6 @@ class PlayingBarBox(nps.BoxTitle):
 
     def anim_off(self):
         self.entry_widget.anim_off()
-
-    def destroy(self):
-        self.entry_widget.destroy()
 
 
 class PlayButton(nps.ButtonPress):
@@ -169,11 +170,19 @@ class PlayButton(nps.ButtonPress):
             self.parent_form.w_playing.anim_off()
             self.name = PlayButton.PLAY
 
+    @synchronized
+    def stop(self):
+        self.destroy()
+        self.parent_form.w_playing.anim_off()
+        self.parent_form.w_playing.set_value(0)
+
     def destroy(self):
         if self.p_ydl is not None:
             self.p_ydl.kill()
+            self.p_ydl = None
         if self.p_ffplay is not None:
             self.p_ffplay.kill()
+            self.p_ffplay = None
 
 
 class PlayButtonBox(nps.BoxTitle):
