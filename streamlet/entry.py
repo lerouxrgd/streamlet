@@ -6,6 +6,7 @@ import time
 
 import npyscreen as nps
 
+from threading import Thread
 from multiprocessing import Pipe, Process
 from subprocess import Popen
 
@@ -115,7 +116,16 @@ class PlayButton(nps.ButtonPress):
         self.p_ydl = None
         self.p_ffplay = None
 
-    # TODO: reset button when playing is finished
+        def check_ffplay(this):
+            while True:
+                if this.p_ffplay is not None:
+                    if this.p_ffplay.poll() is not None:
+                        this.stop()
+                time.sleep(1)
+
+        self.t_checker = Thread(target=check_ffplay, args=(self,), daemon=True)
+        self.t_checker.start()
+
     def whenPressed(self):
         # Play music
         if self.name == PlayButton.PLAY:
@@ -175,6 +185,9 @@ class PlayButton(nps.ButtonPress):
         self.destroy()
         self.parent_form.w_playing.anim_off()
         self.parent_form.w_playing.set_value(0)
+        self.parent_form.w_playing.display()
+        self.name = PlayButton.PLAY
+        self.display()
 
     def destroy(self):
         if self.p_ydl is not None:
