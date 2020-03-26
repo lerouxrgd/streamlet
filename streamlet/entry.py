@@ -71,12 +71,24 @@ class VideoUrlInput(nps.TitleText):
                 try:
                     info = ydl.extract_info(self.value, download=False)
                     duration = info["duration"]
+
                     self.parent_form.w_play.stop()
+
                     self.parent_form.w_playing.name = info["title"]
                     self.parent_form.w_playing.set_duration(duration)
                     self.parent_form.w_playing.set_current_time(0)
                     self.parent_form.w_playing.display()
+
+                    self.entry_widget.editing = False
+                    self.entry_widget.how_exited = nps.wgwidget.EXITED_DOWN
+                    self.display()
+
+                    self.parent_form.editw = 2
+                    self.parent_form.w_play.edit()
+
                 except Exception:
+                    nps.notify("Cannot process <Stream URL>", title="Error")
+                    time.sleep(1)
                     return
 
         self.entry_widget.add_handlers({curses.ascii.LF: prepare_video})
@@ -166,6 +178,8 @@ class PlayButton(nps.ButtonPress):
 
     def whenPressed(self):
         if self.parent_form.w_playing.name is None:
+            nps.notify("Stream is not set", title="Warning")
+            time.sleep(1)
             return
 
         # Play music
