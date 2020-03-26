@@ -12,6 +12,7 @@ from multiprocessing import Pipe, Process
 from subprocess import Popen
 from threading import Thread
 
+from alsaaudio import Mixer
 from youtube_dl import YoutubeDL
 from .thread_utils import KillableThread, synchronized
 
@@ -33,6 +34,7 @@ class MainForm(nps.Form):
         self.w_video_url = self.add(
             VideoUrlInput,
             parent_form=self,
+            begin_entry_at=14,
             name="Stream URL:",
             value="https://www.youtube.com/watch?v=ukzOgoLjHLk",
             # value="https://www.youtube.com/watch?v=XivIbYWE0go",
@@ -40,11 +42,18 @@ class MainForm(nps.Form):
 
         self.w_playing = self.add(PlayingBarBox, rely=4, max_height=3,)
 
-        self.w_play = self.add(
-            PlayButtonBox,
-            max_height=3,
-            max_width=14,
-            contained_widget_arguments={"parent_form": self},
+        self.w_play = self.add(PlayButton, parent_form=self, rely=7,)
+
+        self.w_volume = self.add(
+            VolumeControl,
+            rely=7,
+            relx=12,
+            max_width=20,
+            begin_entry_at=4,
+            name=u"\U0001F50A",
+            color="STANDOUT",
+            step=3,
+            out_of=99,
         )
 
     def destroy(self):
@@ -156,8 +165,8 @@ class PlayingBarBox(nps.BoxTitle):
 
 
 class PlayButton(nps.ButtonPress):
-    PLAY = "\u25B6"
-    PAUSE = "\u23F8"
+    PLAY = u"\u25B6"
+    PAUSE = u"\u23F8"
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
@@ -240,14 +249,14 @@ class PlayButton(nps.ButtonPress):
             self.p_ffplay = None
 
 
-class PlayButtonBox(nps.BoxTitle):
-    _contained_widget = PlayButton
+class VolumeControl(nps.TitleSliderNoLabel):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.mixer = Mixer()
+        self.value = 3 * round(self.mixer.getvolume()[0] / 3)
 
-    def stop(self):
-        self.entry_widget.stop()
-
-    def destroy(self):
-        self.entry_widget.destroy()
+    def when_value_edited(self):
+        self.mixer.setvolume(int(self.value))
 
 
 def main():

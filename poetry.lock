@@ -178,6 +178,14 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 version = "1.8.1"
 
 [[package]]
+category = "main"
+description = "ALSA bindings"
+name = "pyalsaaudio"
+optional = false
+python-versions = "*"
+version = "0.8.4"
+
+[[package]]
 category = "dev"
 description = "Python style guide checker"
 name = "pycodestyle"
@@ -272,7 +280,7 @@ python-versions = "*"
 version = "2020.3.24"
 
 [metadata]
-content-hash = "992f63aba7c6d2a527568ad47bce648117e62d37cb4bf9b5c88e048e39e938e6"
+content-hash = "e26de75e9d550bbceb35977a53ccfbcf45c04615307e007c7317d779072b258f"
 python-versions = "^3.8"
 
 [metadata.files]
@@ -342,6 +350,9 @@ pluggy = [
 py = [
     {file = "py-1.8.1-py2.py3-none-any.whl", hash = "sha256:c20fdd83a5dbc0af9efd622bee9a5564e278f6380fffcacc43ba6f43db2813b0"},
     {file = "py-1.8.1.tar.gz", hash = "sha256:5e27081401262157467ad6e7f851b7aa402c5852dbcb3dae06768434de5752aa"},
+]
+pyalsaaudio = [
+    {file = "pyalsaaudio-0.8.4.tar.gz", hash = "sha256:84e8f8da544d7f4bd96479ce4a237600077984d9be1d7f16c1d9a492ecf50085"},
 ]
 pycodestyle = [
     {file = "pycodestyle-2.5.0-py2.py3-none-any.whl", hash = "sha256:95a2219d12372f05704562a14ec30bc76b05a5b297b21a5dfe3f6fac3491ae56"},

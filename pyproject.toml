@@ -8,6 +8,7 @@ authors = ["Romain Leroux <romain@leroux.dev>"]
 python = "^3.8"
 npyscreen = "^4.10"
 youtube_dl = "^2020"
+pyalsaaudio = "^0.8"
 
 [tool.poetry.scripts]
 streamlet = 'streamlet.entry:main'
