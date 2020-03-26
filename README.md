@@ -1,6 +1,6 @@
-# streamlet
+# streamlet - Terminal UI for streaming music
 
-Work in progress.
+**Requirements:** [ffmpeg] must be installed (in order to use `fflpay`). For now, only `Linux` is supported.
 
 ## Usage
 
@@ -24,7 +24,8 @@ You will also have dev dependencies avaialble, that means [black][] for code for
 
 To test as you develop, you can use `poetry run streamlet` and play with it.
 
-[poetry]: https://python-poetry.org/
+[ffmpeg]: https://ffmpeg.org
+[poetry]: https://python-poetry.org
 [black]: https://github.com/psf/black
 [flake8]: https://github.com/PyCQA/flake8
 [jedi]: https://github.com/davidhalter/jedi
