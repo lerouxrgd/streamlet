@@ -74,6 +74,7 @@ class VideoUrlInput(nps.TitleText):
                     self.parent_form.w_play.stop()
                     self.parent_form.w_playing.name = info["title"]
                     self.parent_form.w_playing.set_duration(duration)
+                    self.parent_form.w_playing.set_current_time(0)
                     self.parent_form.w_playing.display()
                 except Exception:
                     return
@@ -85,6 +86,25 @@ class PlayingBar(nps.SliderNoLabel):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         self.editable = False
+
+
+def fmt_duration(seconds):
+    seconds = int(seconds)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    if hours > 0:
+        return "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
+    elif minutes > 0:
+        return "{:02}:{:02}".format(minutes, seconds)
+    else:
+        return "{:02}".format(seconds)
+
+
+class PlayingBarBox(nps.BoxTitle):
+    _contained_widget = PlayingBar
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
         self.t_anim = None
 
     @synchronized
@@ -97,8 +117,9 @@ class PlayingBar(nps.SliderNoLabel):
 
         def anim(w):
             while True:
-                time.sleep(1 - datetime.utcnow().microsecond/1000000.0)
-                w.h_increase(1)
+                time.sleep(1 - datetime.utcnow().microsecond / 1000000.0)
+                w.entry_widget.h_increase(1)
+                w.set_current_time(w.entry_widget.value)
                 w.display()
 
         self.t_anim = KillableThread(target=anim, args=(self,), daemon=True)
@@ -109,19 +130,17 @@ class PlayingBar(nps.SliderNoLabel):
             self.t_anim.terminate()
             self.t_anim = None
 
+    def reset(self):
+        self.entry_widget.value = 0
+        self.set_current_time(0)
 
-# TODO: should also contain a timer (in the footer ?)
-class PlayingBarBox(nps.BoxTitle):
-    _contained_widget = PlayingBar
+    def set_current_time(self, seconds):
+        self.footer = "{} / {}".format(
+            fmt_duration(seconds), fmt_duration(self.entry_widget.out_of),
+        )
 
     def set_duration(self, duration):
         self.entry_widget.out_of = duration
-
-    def anim_on(self):
-        self.entry_widget.anim_on()
-
-    def anim_off(self):
-        self.entry_widget.anim_off()
 
 
 class PlayButton(nps.ButtonPress):
@@ -193,7 +212,7 @@ class PlayButton(nps.ButtonPress):
     def stop(self):
         self.destroy()
         self.parent_form.w_playing.anim_off()
-        self.parent_form.w_playing.set_value(0)
+        self.parent_form.w_playing.reset()
         self.parent_form.w_playing.display()
         self.name = PlayButton.PLAY
         self.display()
