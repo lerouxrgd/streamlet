@@ -1,4 +1,4 @@
-# streamlet - Terminal UI for streaming music
+# streamlet - TUI for streaming music
 
 **Requirements:** [ffmpeg] must be installed (in order to use `fflpay`). For now, only `Linux` is supported.
 
@@ -20,7 +20,8 @@ with `poetry update`.
 
 Run `poetry shell` to start a virtualenv and use your favorite editor from there.
 You will also have dev dependencies avaialble, that means [black][] for code formatting,
-[flake8][] for linting, [jedi][] for autocompletion/static analysis/refactoring.
+[flake8][] for linting, [jedi][] for autocompletion/static analysis/refactoring (provided
+through [pyls][]).
 
 To test as you develop, you can use `poetry run streamlet` and play with it.
 
@@ -29,3 +30,4 @@ To test as you develop, you can use `poetry run streamlet` and play with it.
 [black]: https://github.com/psf/black
 [flake8]: https://github.com/PyCQA/flake8
 [jedi]: https://github.com/davidhalter/jedi
+[pyls]: https://github.com/palantir/python-language-server

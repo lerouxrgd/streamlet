@@ -17,7 +17,8 @@ streamlet = 'streamlet.entry:main'
 pytest = "^5.2"
 black = { version = "*", allow-prereleases = true }
 flake8 = "^3.7"
-jedi = "^0.16"
+python-language-server = "^0.31"
+pyls-black = "^0.4.4"
 
 [build-system]
 requires = ["poetry>=0.12"]
