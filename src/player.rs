@@ -1,11 +1,11 @@
-use std::error::Error;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use anyhow::Result;
 use gstreamer::{self as gst, glib, prelude::*};
 use gstreamer_player as gst_player;
-use subprocess::{Exec, Redirection};
 
 const SPINNER: [&'static str; 8] = ["|", "/", "-", r"\", "|", "/", "-", r"\"];
 
@@ -15,13 +15,13 @@ pub struct Player {
     player: gst_player::Player,
     playing: Arc<AtomicBool>,
     uri: String,
-    ydl_fetcher: Option<thread::JoinHandle<()>>,
+    ydl_fetcher: Option<smol::Task<Result<()>>>,
     stream_info: Arc<Mutex<Option<StreamInfo>>>,
     spinner: AtomicUsize,
 }
 
 impl Player {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> Result<Self> {
         gst::init()?;
 
         let main_loop_handle = thread::spawn(move || glib::MainLoop::new(None, false).run());
@@ -61,20 +61,17 @@ impl Player {
         let playing = self.playing.clone();
         let stream_info = self.stream_info.clone();
 
-        let fetcher_handle = thread::spawn(move || {
-            let output = Exec::cmd("youtube-dl")
-                .arg("-j")
-                .arg(&uri)
-                .stdout(Redirection::Pipe)
-                .capture()
-                .unwrap()
-                .stdout_str();
+        let fetch_task = smol::spawn(async move {
+            let output = Command::new("youtube-dl")
+                .stderr(Stdio::null())
+                .args(&["-j", &uri])
+                .output()?
+                .stdout;
+            let output = String::from_utf8(output)?;
 
-            let video = serde_json::from_str::<serde_json::Value>(&output).unwrap();
-
-            let formats = video["formats"].as_array().unwrap();
-            let url = formats[0]["url"].as_str().unwrap();
-            let title = video["title"].as_str().unwrap().to_string();
+            let meta = serde_json::from_str::<YtDlMeta>(&output)?;
+            let url = meta.formats[0].url.clone();
+            let title = meta.title;
 
             player.set_uri(&url);
             player.set_video_track_enabled(false);
@@ -83,9 +80,11 @@ impl Player {
 
             let stream_info = &mut *stream_info.lock().unwrap();
             *stream_info = Some(StreamInfo { uri, title });
+
+            Ok(())
         });
 
-        self.ydl_fetcher = Some(fetcher_handle);
+        self.ydl_fetcher.replace(fetch_task);
     }
 
     pub fn progress(&self) -> f64 {
@@ -165,4 +164,15 @@ impl Player {
 struct StreamInfo {
     uri: String,
     title: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct YtDlMeta {
+    title: String,
+    formats: Vec<YtDlFormat>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct YtDlFormat {
+    url: String,
 }

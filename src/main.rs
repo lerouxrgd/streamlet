@@ -9,7 +9,6 @@ use clipboard::{ClipboardContext, ClipboardProvider};
 use termion::{
     event::Key, input::MouseTerminal, input::TermRead, raw::IntoRawMode, screen::AlternateScreen,
 };
-
 use tui::{
     backend::TermionBackend,
     layout::{Alignment, Constraint, Direction, Layout},

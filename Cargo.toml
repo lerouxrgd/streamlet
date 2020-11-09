@@ -5,11 +5,13 @@ authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1"
 clipboard = "0.5"
 gstreamer = "0.16"
 gstreamer-player = "0.16"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-subprocess = "0.2"
-termion = "1.5"
+smol = "1"
+termion = "1"
 tui = "0.12"
 unicode-width = "0.1"
