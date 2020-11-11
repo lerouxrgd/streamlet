@@ -3,6 +3,12 @@ name = "streamlet"
 version = "0.1.0"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2018"
+description = "TUI for streaming music"
+repository = "https://github.com/lerouxrgd/streamlet"
+keywords = ["cli", "tui", "streaming", "music", "audio"]
+categories = ["command-line-utilities"]
+license = "GPL-3.0"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1"
