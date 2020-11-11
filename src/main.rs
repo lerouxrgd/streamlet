@@ -27,8 +27,7 @@ struct App {
 impl App {
     fn new() -> App {
         App {
-            // input: "https://www.franceinter.fr/direct".into(),
-            input: "https://www.youtube.com/watch?v=ukzOgoLjHLk".into(),
+            input: String::default(),
             focused: Focused::Input,
         }
     }

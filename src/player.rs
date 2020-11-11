@@ -4,18 +4,25 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
+use futures::executor::ThreadPool;
+use futures::future::FutureExt;
 use gstreamer::{self as gst, glib, prelude::*};
 use gstreamer_player as gst_player;
+use lazy_static::lazy_static;
 
 const SPINNER: [&'static str; 8] = ["|", "/", "-", r"\", "|", "/", "-", r"\"];
 
+lazy_static! {
+    pub static ref TP: ThreadPool = ThreadPool::new().unwrap();
+}
+
 pub struct Player {
     #[allow(dead_code)]
-    main_loop_handle: thread::JoinHandle<()>,
+    glib_loop: thread::JoinHandle<()>,
     player: gst_player::Player,
     playing: Arc<AtomicBool>,
     uri: String,
-    ydl_fetcher: Option<smol::Task<Result<()>>>,
+    fetching: Arc<AtomicBool>,
     stream_info: Arc<Mutex<Option<StreamInfo>>>,
     spinner: AtomicUsize,
 }
@@ -24,7 +31,7 @@ impl Player {
     pub fn new() -> Result<Self> {
         gst::init()?;
 
-        let main_loop_handle = thread::spawn(move || glib::MainLoop::new(None, false).run());
+        let glib_loop = thread::spawn(move || glib::MainLoop::new(None, false).run());
 
         let dispatcher = gst_player::PlayerGMainContextSignalDispatcher::new(None);
         let player = gst_player::Player::new(
@@ -40,11 +47,11 @@ impl Player {
         });
 
         Ok(Self {
-            main_loop_handle,
+            glib_loop,
             player,
             playing,
             uri: String::default(),
-            ydl_fetcher: None,
+            fetching: Arc::new(AtomicBool::new(false)),
             stream_info: Arc::new(Mutex::new(None)),
             spinner: AtomicUsize::new(0),
         })
@@ -57,34 +64,40 @@ impl Player {
         self.uri = uri.to_string();
 
         let uri = uri.to_string();
+        let fetching = self.fetching.clone();
         let player = self.player.clone();
         let playing = self.playing.clone();
         let stream_info = self.stream_info.clone();
 
-        let fetch_task = smol::spawn(async move {
-            let output = Command::new("youtube-dl")
-                .stderr(Stdio::null())
-                .args(&["-j", &uri])
-                .output()?
-                .stdout;
-            let output = String::from_utf8(output)?;
+        self.fetching.store(true, Ordering::SeqCst);
 
-            let meta = serde_json::from_str::<YtDlMeta>(&output)?;
-            let url = meta.formats[0].url.clone();
-            let title = meta.title;
+        TP.spawn_ok(
+            async move {
+                let output = Command::new("youtube-dl")
+                    .stderr(Stdio::null())
+                    .args(&["--socket-timeout", "5", "-j", &uri])
+                    .output()?
+                    .stdout;
+                let output = String::from_utf8(output)?;
 
-            player.set_uri(&url);
-            player.set_video_track_enabled(false);
-            player.play();
-            playing.store(true, Ordering::SeqCst);
+                let meta = serde_json::from_str::<YtDlMeta>(&output)?;
+                let url = meta.formats[0].url.clone();
+                let title = meta.title;
 
-            let stream_info = &mut *stream_info.lock().unwrap();
-            *stream_info = Some(StreamInfo { uri, title });
+                player.set_uri(&url);
+                player.set_video_track_enabled(false);
+                player.play();
+                playing.store(true, Ordering::SeqCst);
 
-            Ok(())
-        });
+                let stream_info = &mut *stream_info.lock().unwrap();
+                *stream_info = Some(StreamInfo { uri, title });
 
-        self.ydl_fetcher.replace(fetch_task);
+                Ok(())
+            }
+            .map(move |_: Result<()>| {
+                fetching.store(false, Ordering::SeqCst);
+            }),
+        );
     }
 
     pub fn progress(&self) -> f64 {
@@ -98,14 +111,28 @@ impl Player {
         }
     }
 
-    pub fn title(&self) -> String {
-        if let Some(info) = &*self.stream_info.lock().unwrap() {
-            if &self.uri != &info.uri {
-                let i = self
-                    .spinner
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |i| Some((i + 1) % 8));
-                SPINNER[i.unwrap()].to_string()
-            } else {
+    fn spin(&self) -> String {
+        let i = self
+            .spinner
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |i| Some((i + 1) % 8));
+        SPINNER[i.unwrap()].to_string()
+    }
+
+    pub fn title(&mut self) -> String {
+        match &*self.stream_info.lock().unwrap() {
+            None => {
+                if self.fetching.load(Ordering::SeqCst) {
+                    return self.spin();
+                }
+
+                String::default()
+            }
+
+            Some(info) => {
+                if self.fetching.load(Ordering::SeqCst) {
+                    return self.spin();
+                }
+
                 let dur = self.player.get_duration().seconds().unwrap_or_else(|| 0);
                 let pos = self.player.get_position().seconds().unwrap_or_else(|| 0);
 
@@ -128,15 +155,6 @@ impl Player {
                 };
 
                 format!("{} ({} / {})", info.title, pos_fmt, dur_fmt)
-            }
-        } else {
-            if &self.uri == "" {
-                String::default()
-            } else {
-                let i = self
-                    .spinner
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |i| Some((i + 1) % 8));
-                SPINNER[i.unwrap()].to_string()
             }
         }
     }
