@@ -84,7 +84,7 @@ impl Player {
                 let url = meta.formats[0].url.clone();
                 let title = meta.title;
 
-                player.set_uri(&url);
+                player.set_uri(Some(&url));
                 player.set_video_track_enabled(false);
                 player.play();
                 playing.store(true, Ordering::SeqCst);
@@ -101,8 +101,16 @@ impl Player {
     }
 
     pub fn progress(&self) -> f64 {
-        let duration = self.player.get_duration().seconds().unwrap_or_else(|| 0);
-        let position = self.player.get_position().seconds().unwrap_or_else(|| 0);
+        let duration = self
+            .player
+            .duration()
+            .map(|d| d.seconds())
+            .unwrap_or_else(|| 0);
+        let position = self
+            .player
+            .position()
+            .map(|d| d.seconds())
+            .unwrap_or_else(|| 0);
 
         if duration == 0 {
             0.0
@@ -133,8 +141,16 @@ impl Player {
                     return self.spin();
                 }
 
-                let dur = self.player.get_duration().seconds().unwrap_or_else(|| 0);
-                let pos = self.player.get_position().seconds().unwrap_or_else(|| 0);
+                let dur = self
+                    .player
+                    .duration()
+                    .map(|d| d.seconds())
+                    .unwrap_or_else(|| 0);
+                let pos = self
+                    .player
+                    .position()
+                    .map(|d| d.seconds())
+                    .unwrap_or_else(|| 0);
 
                 let dur_hh = dur / 3600;
                 let dur_mm = (dur / 60) % 60;
